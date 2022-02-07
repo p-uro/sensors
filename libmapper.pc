@@ -1,0 +1,11 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libmapper
+Description: A library for mapping controllers and synthesizers.
+Requires: liblo
+Version: 2.1.36+g1a996b0a
+Libs: -L${libdir} -lmapper
+Cflags: -I${includedir}/mapper
