@@ -9,6 +9,8 @@
 #include <mapper/mapper_cpp.h>
 #include "bitalino.h"
 #include <sys/select.h>
+#include <thread>
+#include <chrono>
 
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
@@ -18,7 +20,7 @@ using namespace mapper;
 
 int received = 0;
 int done = 0;
-int val = 0;
+int val = 100;
 int verbose = 1;
 int terminate = 0;
 int period = 100;
@@ -45,120 +47,13 @@ private:
 };
 out_stream null_out;
 
-void simple_handler(Signal &&sig, int length, Type type, const void *value, Time &&t)
+void instance_handler_in(Signal::Instance &&si, Signal::Event event, int length,
+                         Type type, const void *value, Time &&t)
 {
     ++received;
     if (verbose)
     {
-        std::cout << "signal update:" << sig[Property::NAME];
-    }
-
-    if (!value)
-    {
-        if (verbose)
-            std::cout << " ––––––––" << std::endl;
-        return;
-    }
-    else if (!verbose)
-        return;
-
-    switch (type)
-    {
-    case Type::INT32:
-    {
-        int *v = (int *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
-        break;
-    }
-    case Type::FLOAT:
-    {
-        float *v = (float *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
-        break;
-    }
-    case Type::DOUBLE:
-    {
-        double *v = (double *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
-        break;
-    }
-    default:
-        break;
-    }
-    std::cout << std::endl;
-}
-
-void standard_handler(Signal &&sig, Signal::Event event, Id instance, int length,
-                      Type type, const void *value, Time &&t)
-{
-    ++received;
-    if (verbose)
-    {
-        std::cout << "\t\t\t\t\t   | --> signal update:"
-                  << sig[Property::NAME] << "." << instance;
-    }
-
-    if (!value)
-    {
-        if (verbose)
-            std::cout << " ––––––––" << std::endl;
-        sig.instance(instance).release();
-        return;
-    }
-    else if (!verbose)
-        return;
-
-    switch (type)
-    {
-    case Type::INT32:
-    {
-        int *v = (int *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
-        break;
-    }
-    case Type::FLOAT:
-    {
-        float *v = (float *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
-        break;
-    }
-    case Type::DOUBLE:
-    {
-        double *v = (double *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
-        break;
-    }
-    default:
-        break;
-    }
-    std::cout << std::endl;
-}
-
-void instance_handler(Signal::Instance &&si, Signal::Event event, int length,
-                      Type type, const void *value, Time &&t)
-{
-    ++received;
-    if (verbose)
-    {
-        std::cout << "\t\t\t\t\t   | --> signal update:" << si.signal()[Property::NAME] << "." << si.id();
+        std::cout << "\t\t\t\t\t   | --> signal update:  input signal: " << si.signal()[Property::NAME] << ", new value: ";
     }
 
     if (!value)
@@ -178,25 +73,43 @@ void instance_handler(Signal::Instance &&si, Signal::Event event, int length,
         int *v = (int *)value;
         for (int i = 0; i < length; i++)
         {
-            std::cout << " " << v[i];
+            std::cout << " " << v[i] << std::endl;
         }
         break;
     }
-    case Type::FLOAT:
-    {
-        float *v = (float *)value;
-        for (int i = 0; i < length; i++)
-        {
-            std::cout << " " << v[i];
-        }
+    default:
         break;
     }
-    case Type::DOUBLE:
+    std::cout << std::endl;
+}
+
+void instance_handler_out(Signal::Instance &&si, Signal::Event event, int length,
+                          Type type, const void *value, Time &&t)
+{
+    ++received;
+    if (verbose)
     {
-        double *v = (double *)value;
+        std::cout << "\t\t\t\t\t   | --> signal update: output signal: " << si.signal()[Property::NAME] << ", new value: ";
+    }
+
+    if (!value)
+    {
+        if (verbose)
+            std::cout << " ––––––––" << std::endl;
+        si.release();
+        return;
+    }
+    else if (!verbose)
+        return;
+
+    switch (type)
+    {
+    case Type::INT32:
+    {
+        int *v = (int *)value;
         for (int i = 0; i < length; i++)
         {
-            std::cout << " " << v[i];
+            std::cout << " " << v[i] << std::endl;
         }
         break;
     }
@@ -224,6 +137,22 @@ bool keypressed(void)
     return (select(FD_SETSIZE, &readfds, NULL, NULL, &readtimeout) == 1);
 }
 
+// void p()
+// {
+//     std::cout << "Hello, World\n";
+//     std::cin.ignore();
+// }
+
+// void randomizer()
+// {
+//     // int count = 0;
+//     while (val < 110)
+//     {
+//         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+//         val++;
+//         // count++;
+//     }
+// }
 void polling_data()
 {
     try
@@ -238,61 +167,42 @@ void polling_data()
 
         puts("Connecting to device...");
 
-        // use one of the lines below
-        BITalino bit_dev("98:D3:31:B2:11:6B"); // device MAC address (Windows and Linux)
-
-        //BITalino dev("COM5");  // Bluetooth virtual COM port or USB-UART COM port (Windows)
-
-        //BITalino dev("/dev/ttyUSB0");  // USB-UART device (Linux)
-        //BITalino dev("/dev/rfcomm0");  // Bluetooth virtual serial port (Linux)
-
-        //BITalino dev("/dev/tty.usbserial-A1000QIz");  // USB-UART device (Mac OS)
-        //BITalino dev("/dev/tty.bitalino-DevB");  // Bluetooth virtual serial port (Mac OS)
+        BITalino dev("/dev/tty.BITalino-1E-10-DevB"); // device MAC address (Windows and Linux)
 
         puts("Connected to device. Press Enter to exit.");
 
-        std::string ver = bit_dev.version(); // get device version string
+        std::string ver = dev.version(); // get device version string
         printf("BITalino version: %s\n", ver.c_str());
 
-        bit_dev.battery(10); // set battery threshold (optional)
+        dev.battery(10); // set battery threshold (optional)
 
-        // dev.start(1000, {0, 1, 2, 3, 4, 5});   // start acquisition of all channels at 1000 Hz
+        dev.start(1000, {0, 1, 2, 3, 4, 5}); // start acquisition of all channels at 1000 Hz
         // use block below if your compiler doesn't support vector initializer lists
 
-        BITalino::Vint chans;
-        chans.push_back(0);
-        chans.push_back(1);
-        chans.push_back(2);
-        chans.push_back(3);
-        chans.push_back(4);
-        chans.push_back(5);
-        bit_dev.start(1000, chans);
-
-        //dev.trigger({false, false, true, false});  // for original BITalino
-        //dev.trigger({true, false});                // for BITalino 2
-        // use block below if your compiler doesn't support vector initializer lists
-        /*
-      BITalino::Vbool outputs;
-      outputs.push_back(false);
-      outputs.push_back(false);
-      outputs.push_back(true);
-      outputs.push_back(false);
-      dev.trigger(outputs);
-      */
+        // BITalino::Vint chans;
+        // chans.push_back(0);
+        // chans.push_back(1);
+        // chans.push_back(2);
+        // chans.push_back(3);
+        // chans.push_back(4);
+        // chans.push_back(5);
+        // dev.start(1000, chans);
 
         BITalino::VFrame frames(100); // initialize the frames vector with 100 frames
         do
         {
-            bit_dev.read(frames);                            // get 100 frames from device
-            const BITalino::Frame &f = frames[0];            // get a reference to the first frame of each 100 frames block
-            printf("%d : %d %d %d %d ; %d %d %d %d %d %d\n", // dump the first frame
-                   f.seq,
-                   f.digital[0], f.digital[1], f.digital[2], f.digital[3],
-                   f.analog[0], f.analog[1], f.analog[2], f.analog[3], f.analog[4], f.analog[5]);
+            dev.read(frames);                     // get 100 frames from device
+            const BITalino::Frame &f = frames[0]; // get a reference to the first frame of each 100 frames block
+            val = f.analog[0];
+            // out << val << std::endl;
+            // printf("%d : %d %d %d %d ; %d %d %d %d %d %d\n", // dump the first frame
+            //        f.seq,
+            //        f.digital[0], f.digital[1], f.digital[2], f.digital[3],
+            //        f.analog[0], f.analog[1], f.analog[2], f.analog[3], f.analog[4], f.analog[5]);
 
         } while (!keypressed()); // until a key is pressed
 
-        bit_dev.stop(); // stop acquisition
+        dev.stop(); // stop acquisition
         // return val;
     } // dev is destroyed here (it goes out of scope)
     catch (BITalino::Exception &e)
@@ -305,7 +215,8 @@ int main(int argc, char **argv)
 {
     int i = 0, j, result = 0;
     char *iface = 0;
-    polling_data();
+    // std::thread thread_object1(randomizer);
+    std::thread thread_object2(polling_data);
     // process flags for -v verbose, -t terminate, -h help
     for (i = 1; i < argc; i++)
     {
@@ -354,23 +265,23 @@ int main(int argc, char **argv)
     std::ostream &out = verbose ? std::cout : null_out;
 
     Device dev("testcpp");
-    if (iface)
-        dev.graph().set_iface(iface);
-    out << "Created Device with interface " << dev.graph().iface() << std::endl;
+    // if (iface)
+    //     dev.graph().set_iface(iface);
+    // out << "Created Device with interface " << dev.graph().iface() << std::endl;
 
     // make a copy of the device to check reference counting
     Device devcopy(dev);
 
-    Signal sig = dev.add_signal(Direction::INCOMING, "in1", 1, Type::FLOAT, "meters")
-                     .set_callback(standard_handler);
-    dev.remove_signal(sig);
-    dev.add_signal(Direction::INCOMING, "in2", 2, Type::INT32).set_callback(standard_handler);
-    dev.add_signal(Direction::INCOMING, "in3", 2, Type::INT32).set_callback(standard_handler);
-    dev.add_signal(Direction::INCOMING, "in4", 2, Type::INT32).set_callback(simple_handler);
+    // Signal sig = dev.add_signal(Direction::INCOMING, "in1", 1, Type::INT32, "meters")
+    //                  .set_callback(standard_handler);
+    // dev.remove_signal(sig);
+    // Signal insig1 = dev.add_signal(Direction::INCOMING, "in2", 1, Type::INT32).set_callback(instance_handler_in);
+    Signal insig2 = dev.add_signal(Direction::INCOMING, "in3", 2, Type::INT32).set_callback(instance_handler_in);
+    // dev.add_signal(Direction::INCOMING, "in4", 2, Type::INT32).set_callback(simple_handler);
 
-    sig = dev.add_signal(Direction::OUTGOING, "out1", 1, Type::FLOAT, "na");
-    dev.remove_signal(sig);
-    sig = dev.add_signal(Direction::OUTGOING, "out2", 3, Type::DOUBLE, "meters");
+    Signal outsig1 = dev.add_signal(Direction::OUTGOING, "out1", 1, Type::INT32, "na").set_callback(instance_handler_out);
+    // dev.remove_signal(sig);
+    Signal outsig2 = dev.add_signal(Direction::OUTGOING, "out2", 2, Type::INT32, "meters").set_callback(instance_handler_out);
 
     out << "waiting" << std::endl;
     while (!dev.ready() && !done)
@@ -379,211 +290,38 @@ int main(int argc, char **argv)
     }
     out << "ready" << std::endl;
 
-    out << "device " << dev[Property::NAME] << " ready..." << std::endl;
-    out << "  ordinal: " << dev["ordinal"] << std::endl;
-    out << "  id: " << dev[Property::ID] << std::endl;
-    out << "  interface: " << dev.graph().iface() << std::endl;
-    out << "  bus url: " << dev.graph().address() << std::endl;
-    out << "  port: " << dev["port"] << std::endl;
-    out << "  num_inputs: " << dev.signals(Direction::INCOMING).size() << std::endl;
-    out << "  num_outputs: " << dev.signals(Direction::OUTGOING).size() << std::endl;
-    out << "  num_incoming_maps: " << dev.maps(Direction::INCOMING).size() << std::endl;
-    out << "  num_outgoing_maps: " << dev.maps(Direction::OUTGOING).size() << std::endl;
-
-    int value[] = {1, 2, 3, 4, 5, 6};
-    dev.set_property("foo", 6, value);
-    out << "foo: " << dev["foo"] << std::endl;
-
-    dev["foo"] = 100;
-    out << "foo: " << dev["foo"] << std::endl;
-
-    // test std::array<std::string>
-    out << "set and get std::array<std::string>: ";
-    std::array<std::string, 3> a1 = {{"one", "two", "three"}};
-    dev["foo"] = a1;
-    const std::array<std::string, 8> a2 = dev["foo"];
-    for (i = 0; i < 8; i++)
-        out << a2[i] << " ";
-    out << std::endl;
-
-    // test std::array<const char*>
-    out << "set and get std::array<const char*>: ";
-    std::array<const char *, 3> a3 = {{"four", "five", "six"}};
-    dev["foo"] = a3;
-    std::array<const char *, 3> a4 = dev["foo"];
-    for (i = 0; i < (int)a4.size(); i++)
-        out << a4[i] << " ";
-    out << std::endl;
-
-    // test plain array of const char*
-    out << "set and get const char*[]: ";
-    const char *a5[3] = {"seven", "eight", "nine"};
-    dev.set_property("foo", 3, a5);
-    const char **a6 = dev["foo"];
-    out << a6[0] << " " << a6[1] << " " << a6[2] << std::endl;
-
-    // test plain array of float
-    out << "set and get float[]: ";
-    float a7[3] = {7.7f, 8.8f, 9.9f};
-    dev.set_property("foo", 3, a7);
-    const float *a8 = dev["foo"];
-    out << a8[0] << " " << a8[1] << " " << a8[2] << std::endl;
-
-    // test std::vector<const char*>
-    out << "set and get std::vector<const char*>: ";
-    const char *a9[3] = {"ten", "eleven", "twelve"};
-    std::vector<const char *> v1(a9, std::end(a9));
-    dev["foo"] = v1;
-    std::vector<const char *> v2 = dev["foo"];
-    out << "foo: ";
-    for (std::vector<const char *>::iterator it = v2.begin(); it != v2.end(); ++it)
-        out << *it << " ";
-    out << std::endl;
-
-    // test std::vector<std::string>
-    out << "set and get std::vector<std::string>: ";
-    const char *a10[3] = {"thirteen", "14", "15"};
-    std::vector<std::string> v3(a10, std::end(a10));
-    dev["foo"] = v3;
-    std::vector<std::string> v4 = dev["foo"];
-    out << "foo: ";
-    for (std::vector<std::string>::iterator it = v4.begin(); it != v4.end(); ++it)
-        out << *it << " ";
-    out << std::endl;
-
-    dev.remove_property("foo");
-    out << "foo: " << dev["foo"] << " (should be 0x0)" << std::endl;
-
-    out << "signal: " << sig << std::endl;
-
-    List<Signal> qsig = dev.signals(Direction::INCOMING);
-    qsig.begin();
-    for (; qsig != qsig.end(); ++qsig)
-    {
-        out << "  input: " << *qsig << std::endl;
-    }
-
     Graph graph;
-    if (iface)
-        graph.set_iface(iface);
-    out << "Created Graph with interface " << graph.iface() << std::endl;
-    Map map(dev.signals(Direction::OUTGOING)[0], dev.signals(Direction::INCOMING)[1]);
-    map[Property::EXPRESSION] = "y=x[0:1]+123";
-
+    Map map(dev.signals(Direction::OUTGOING)[0], dev.signals(Direction::INCOMING)[0]);
     map.push();
 
     while (!map.ready() && !done)
     {
         dev.poll(10);
     }
-
-    // try using threaded device polling
     dev.start();
 
-    std::vector<double> v(3);
-    i = 0;
-    while (i++ < 100 && !done)
+    std::vector<double> v1(1);
+    std::vector<double> v2(2);
+
+    // i = 0;
+    while (val < 7000 && !done)
     {
-        v[i % 3] = i;
-        if (i == 50)
-        {
-            Signal s = *dev.signals().filter(Property::NAME, "in4", Operator::EQUAL);
-            s.set_callback(standard_handler);
-        }
-        sig.set_value(v);
+        // v1[0] = val;
+        v2[0] = val;
+        v2[1] = val + 1;
+        // out << v[0] << std::endl;
+        // Signal s1 = *dev.signals().filter(Property::NAME, "in2", Operator::EQUAL);
+        // Signal s2 = *dev.signals().filter(Property::NAME, "in3", Operator::EQUAL);
+
+        // insig1.set_value(v[0]);
+        // insig2.set_value(v[0] + 1);
+        // outsig1.set_value(v1[0]);
+        outsig2.set_value(v2);
         graph.poll(period);
     }
     dev.stop();
+    // thread_object1.join();
 
-    // try retrieving linked devices
-    out << "devices linked to " << dev << ":" << std::endl;
-    List<Device> foo = dev[Property::LINKED];
-    for (; foo != foo.end(); foo++)
-    {
-        out << "  " << *foo << std::endl;
-    }
-
-    // try combining queries
-    out << "devices with name matching 'my*' AND >=0 inputs" << std::endl;
-    List<Device> qdev = graph.devices();
-    qdev.filter(Property::NAME, "my*", Operator::EQUAL);
-    qdev.filter(Property::NUM_SIGNALS_IN, 0, Operator::GREATER_THAN_OR_EQUAL);
-    for (; qdev != qdev.end(); qdev++)
-    {
-        out << "  " << *qdev << " (" << (*qdev)[Property::NUM_SIGNALS_IN] << " inputs)" << std::endl;
-    }
-
-    // check graph records
-    out << "graph records:" << std::endl;
-    for (const Device d : graph.devices())
-    {
-        out << "  device: " << d << std::endl;
-        for (Signal s : d.signals(Direction::INCOMING))
-        {
-            out << "    input: " << s << std::endl;
-        }
-        for (Signal s : d.signals(Direction::OUTGOING))
-        {
-            out << "    output: " << s << std::endl;
-        }
-    }
-    for (Map m : graph.maps())
-    {
-        out << "  map: " << m << std::endl;
-    }
-
-    // test API for signal instances
-    out << "testing instances API" << std::endl;
-
-    int num_inst = 10;
-    mapper::Signal multisend = dev.add_signal(Direction::OUTGOING, "multisend", 1, Type::FLOAT,
-                                              0, 0, 0, &num_inst);
-    mapper::Signal multirecv = dev.add_signal(Direction::INCOMING, "multirecv", 1, Type::FLOAT,
-                                              0, 0, 0, &num_inst)
-                                   .set_callback(instance_handler, Signal::Event::UPDATE);
-    multisend.set_property(Property::STEAL_MODE, Signal::Stealing::OLDEST);
-    multirecv.set_property(Property::STEAL_MODE, Signal::Stealing::OLDEST);
-    mapper::Map map2(multisend, multirecv);
-    map2.push();
-    while (!map2.ready() && !done)
-    {
-        dev.poll(10);
-    }
-    unsigned long id;
-    for (int i = 0; i < 200 && !done; i++)
-    {
-        id = (rand() % 10) + 5;
-        switch (rand() % 5)
-        {
-        case 0:
-            // try to destroy an instance
-            if (verbose)
-                printf("\t\t  Retiring instance %2lu --> |\n",
-                       (unsigned long)id);
-            multisend.instance(id).release();
-            break;
-        default:
-            // try to update an instance
-            float v = (rand() % 10) * 1.0f;
-            multisend.instance(id).set_value(v);
-            if (verbose)
-                printf("Sender instance %2lu updated to %2f --> |\n",
-                       (unsigned long)id, v);
-            break;
-        }
-        dev.poll(period);
-    }
-
-    // test some time manipulation
-    Time t1(10, 200);
-    Time t2(10, 300);
-    if (t1 < t2)
-        out << "t1 is less than t2" << std::endl;
-    t1 += t2;
-    if (t1 >= t2)
-        out << "(t1 + t2) is greater then or equal to t2 \n THIS CODE WORKS" << std::endl;
-
-    printf("\r..................................................Test %s\x1B[0m.\n",
-           result ? "\x1B[31mFAILED" : "\x1B[32mPASSED");
+    thread_object2.join();
     return result;
 }
